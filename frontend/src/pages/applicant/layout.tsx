@@ -1,4 +1,4 @@
-import { Briefcase, CalendarClock } from 'lucide-react'
+import { Briefcase, CalendarClock, LogOut } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/cn'
@@ -15,7 +15,7 @@ const navItems = [
  * the two portal destinations, above a scrolling content region.
  */
 export function ApplicantPortalLayout() {
-  const { session } = useSession()
+  const { session, signOut } = useSession()
 
   if (!session) return null
 
@@ -66,6 +66,15 @@ export function ApplicantPortalLayout() {
               <p className="text-2xs text-ink-500">Applicant</p>
             </div>
             <Avatar first={user.first_name} last={user.last_name} size="sm" />
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
+            >
+              <LogOut className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Sign out</span>
+              <span className="sr-only sm:hidden">Sign out</span>
+            </button>
           </div>
         </div>
       </header>

@@ -63,6 +63,19 @@ const CONSENT_TEXT =
   'clock-out, and is retained for attendance records. It is visible only to ' +
   'administrators and is deleted after the retention period set in Settings.'
 
+/**
+ * Evidence photographs are sized for upload, not for wall printing: the API
+ * gives every request thirty seconds, and on the office link a full-resolution
+ * webcam frame encoded at 0.9 quality could need most of that allowance
+ * (measured: a 2 MB upload takes about 21 seconds). Drawing the frame with its
+ * longest edge at this limit and stepping the JPEG quality down until the file
+ * fits comfortably inside the budget keeps the picture clearly legible while
+ * letting it reach the server in a second or two.
+ */
+const MAX_PHOTO_EDGE = 1280
+const PHOTO_TARGET_BYTES = 800 * 1024
+const PHOTO_QUALITY_STEPS = [0.8, 0.7, 0.6]
+
 export function KioskPage() {
   const [step, setStep] = React.useState<Step>(() =>
     getKioskToken() ? { kind: 'idle' } : { kind: 'pair' },
@@ -753,9 +766,11 @@ function captureFrame(
       return
     }
 
+    // Preserve the aspect ratio while capping the longest edge.
+    const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(width, height))
     const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
+    canvas.width = Math.round(width * scale)
+    canvas.height = Math.round(height * scale)
     const ctx = canvas.getContext('2d')
     if (!ctx) {
       reject(new Error('This browser cannot process the photograph.'))
@@ -764,22 +779,34 @@ function captureFrame(
 
     if (facing === 'user') {
       // Flip back so the stored photograph reads correctly, not mirrored.
-      ctx.translate(width, 0)
+      ctx.translate(canvas.width, 0)
       ctx.scale(-1, 1)
     }
-    ctx.drawImage(video, 0, 0, width, height)
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('The photograph could not be prepared.'))
-          return
-        }
-        resolve(blob)
-      },
-      'image/jpeg',
-      0.9,
-    )
+    // Start at the sharpest setting and step quality down only while the
+    // encoded file is still larger than the upload budget.
+    const attempt = (index: number): void => {
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('The photograph could not be prepared.'))
+            return
+          }
+          if (
+            blob.size <= PHOTO_TARGET_BYTES ||
+            index === PHOTO_QUALITY_STEPS.length - 1
+          ) {
+            resolve(blob)
+            return
+          }
+          attempt(index + 1)
+        },
+        'image/jpeg',
+        PHOTO_QUALITY_STEPS[index],
+      )
+    }
+    attempt(0)
   })
 }
 
